@@ -144,7 +144,7 @@ def remove_side_lines(img, ratio):
 
 def largest_connected_component(image):
     image = image.astype('uint8')
-    nb_components, output, stats, centroids = cv.connectedComponentsWithStats(image, connectivity=8)
+    nb_components, output, stats, centroids = cv.connectedComponentsWithStats(image, connectivity=4)
     sizes = stats[:, -1]
 
     if len(sizes) <= 1:
@@ -216,7 +216,7 @@ def crop_image(img, src, M):
     img = cv.resize(img, (500, 500))
     img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     img = cv.GaussianBlur(img, (3, 3), 0)
-    img = adaptive_thresh(img) # needed to find largest connected component
+    img = adaptive_thresh(img)  # needed to find largest connected component
 
     cv.imshow("img", img)
 
@@ -232,7 +232,13 @@ def crop_image(img, src, M):
             match = True
             n = i * 9 + j
             blocks.append(img[h * i + offset_h:h * (i + 1) - offset_h, w * j + offset_w:w * (j + 1) - offset_w])
-            # blocks[n] = cv.bitwise_not(blocks[n])
+
+            if i == 0 and j == 1:
+                cv.imshow("number1", blocks[n])
+            #blocks[n] = cv.bitwise_not(blocks[n])
+            blocks[n] = largest_connected_component(blocks[n])
+            if i == 0 and j == 1:
+                cv.imshow("number2", blocks[n])
             # Resize
             digit_pic_size = 28
 
