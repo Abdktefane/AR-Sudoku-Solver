@@ -5,40 +5,11 @@ from scipy import ndimage
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 import time
+from sudoku import Sudoku
 
-number_featuers = []
-sift = cv.SIFT_create()
-bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
+from project import utils as utils
 
-winSize = (28, 28)
-blockSize = (4, 4)
-blockStride = (4, 4)
-cellSize = (4, 4)
-nbins = 9
-hog = cv.HOGDescriptor(winSize, blockSize, blockStride, cellSize, nbins)
-
-model = Sequential()
-model.add(Dense(64, activation='relu', input_dim=441))
-model.add(Dense(64, activation='relu'))
-model.add(Dense(10, activation='softmax'))
-
-model.compile(
-    optimizer='adam',
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
-)
-
-model.load_weights('resources/weights.h5')
-
-
-def check_match(target):
-    pred = model.predict(target)
-    # print(pred)
-    temp = pred[0]
-    temp = np.delete(temp, 0)
-    # print(temp)
-    answer = np.argmax(temp, axis=0) + 1
-    return answer
+model = utils.create_model()
 
 
 def gaussian_blur(src, kernel_size=(5, 5), sigmaX=0):
@@ -64,12 +35,12 @@ def cross_closing(src):
 
 def find_grid_with_contours(src, edited, start_time):
     image = edited.copy()
-    print(time.time() * 1000)
+    # print(time.time() * 1000)
     contours, hierarchy = cv.findContours(image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     if len(contours) != 0:
         c = max(contours, key=cv.contourArea)
         cnt = cv.approxPolyDP(c, 0.01 * cv.arcLength(c, True), True)
-        print(time.time() * 1000)
+        # print(time.time() * 1000)
         rect = 0
 
         if len(cnt) == 4:
@@ -190,9 +161,9 @@ def write_solution_on_image(image, grid, user_grid):
     height = image.shape[0] // 9
     for i in range(SIZE):
         for j in range(SIZE):
-            if (user_grid[i][j] != 0):  # If user fill this cell
+            if user_grid[i][j] != 0 and user_grid[i][j] is not None:  # If user fill this cell
                 continue  # Move on
-            text = str(user_grid[i][j])
+            text = str(grid[i][j])
             off_set_x = width // 15
             off_set_y = height // 15
             font = cv.FONT_HERSHEY_SIMPLEX
@@ -213,12 +184,13 @@ def write_solution_on_image(image, grid, user_grid):
 def crop_image(img, src, M):
     original = img.copy()
 
-    img = cv.resize(img, (500, 500))
+    # TODO modify this
+    img = cv.resize(img, (300, 300))
+    # cv.imshow("origin", img)
     img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    img = cv.GaussianBlur(img, (3, 3), 0)
-    img = adaptive_thresh(img)  # needed to find largest connected component
-
-    cv.imshow("img", img)
+    # img = cv.GaussianBlur(img, (3, 3), 0)
+    # img = adaptive_thresh(img)  # needed to find largest connected component
+    # cv.imshow("img", img)
 
     blocks = []
     userGrid = np.zeros((9, 9), np.uint8)
@@ -226,24 +198,30 @@ def crop_image(img, src, M):
     w = img.shape[1] // 9
     offset_w = np.math.floor(w / 10)  # Offset is used to get rid of the boundaries
     offset_h = np.math.floor(h / 10)
+    fig, axs = plt.subplots(9, 9)
+    kernel = np.ones((3, 3), np.uint8)
     for i in range(9):
         for j in range(9):
             userGrid[i][j] = 1
             match = True
             n = i * 9 + j
             blocks.append(img[h * i + offset_h:h * (i + 1) - offset_h, w * j + offset_w:w * (j + 1) - offset_w])
-
+            # Resize
+            # blocks[n] = remove_side_lines(blocks[n], 0.6)
+            digit_pic_size = 28
+            blocks[n] = cv.resize(blocks[n], (digit_pic_size, digit_pic_size))
             if i == 0 and j == 1:
-                cv.imshow("number1", blocks[n])
-            #blocks[n] = cv.bitwise_not(blocks[n])
-            blocks[n] = largest_connected_component(blocks[n])
+                cv.imshow("number1 before any pre_p", blocks[n])
+            # blocks[n] = cv.bitwise_not(blocks[n])
+            # blocks[n] = cv.GaussianBlur(blocks[n], (3, 3), 0)
+            #blocks[n] = adaptive_thresh(blocks[n])
+            #blocks[n] = largest_connected_component(blocks[n])
             if i == 0 and j == 1:
                 cv.imshow("number2", blocks[n])
-            # Resize
-            digit_pic_size = 28
 
-            blocks[n] = cv.resize(blocks[n], (digit_pic_size, digit_pic_size))
-            _, blocks[n] = cv.threshold(blocks[n], 200, 255, cv.THRESH_BINARY)
+            # _, blocks[n] = cv.threshold(blocks[n], 200, 255, cv.THRESH_BINARY)
+            # blocks[n] = cv.erode(blocks[n], kernel, iterations=1)
+            # blocks[n] = cv.dilate(blocks[n], kernel, iterations=1)
 
             # Criteria 1 for detecting white cell:
             # Has too little black pixels
@@ -273,18 +251,37 @@ def crop_image(img, src, M):
 
             if match:
                 temp = np.uint8(blocks[n])
-                # histogram = hog.compute(temp, None, None)
-                # histogram = np.asarray(histogram)
-                # histogram = histogram.reshape((-1, 441))
-                # id = check_match(histogram)
-                #print(i, j, id)
+                if i == 1 and j == 1:
+                    cv.imshow("number3", temp)
+                histogram = utils.hog.compute(temp, None, None)
+                histogram = np.asarray(histogram)
+                histogram = histogram.reshape((-1, utils.hog_output_shape))
+                id = utils.check_match(histogram, model)
+                print(i, j, id)
+            axs[i, j].imshow(blocks[n], cmap='Greys')
+    plt.show()
+    board = [
+        [5, 3, 0, 0, 7, 0, 0, 0, 0],
+        [6, 0, 0, 1, 9, 5, 0, 0, 0],
+        [0, 9, 8, 0, 0, 0, 0, 6, 0],
+        [8, 0, 0, 0, 6, 0, 0, 0, 3],
+        [4, 0, 0, 8, 0, 3, 0, 0, 1],
+        [7, 0, 0, 0, 2, 0, 0, 0, 6],
+        [0, 6, 0, 0, 0, 0, 2, 8, 0],
+        [0, 0, 0, 4, 1, 9, 0, 0, 5],
+        [0, 0, 0, 0, 8, 0, 0, 7, 9]
+    ]
+
+    puzzle = Sudoku(3, 3, board=board)
+    solution = puzzle.solve().board
+    # solution = puzzle.solve().show()
     test = np.uint8(blocks[1 * 9 + 4])
     cv.imshow("2, 3", test)
     test = np.uint8(blocks[1 * 9 + 5])
     cv.imshow("2, 2", test)
-
     # for now zeros are written in the empty spots
-    image_with_solution = write_solution_on_image(original, userGrid, userGrid)
+    # image_with_solution = write_solution_on_image(original, userGrid, userGrid)
+    image_with_solution = write_solution_on_image(original, solution, board)
     result_sudoku = cv.warpPerspective(image_with_solution, M, (src.shape[1], src.shape[0])
                                        , flags=cv.WARP_INVERSE_MAP)
     result = np.where(result_sudoku.sum(axis=-1, keepdims=True) != 0, result_sudoku, src)
@@ -304,6 +301,7 @@ def pre_processing(src):
 
 if __name__ == '__main__':
     original_sudoku = cv.imread('resources/sod6.jpg')
+    utils.prepare_numbers_features(9, model)
     pre_processing(original_sudoku)
     k = cv.waitKey(0)
     if k == 27:
@@ -314,11 +312,11 @@ if __name__ == '__main__':
     cap.set(4, 720)
     old_sudoku = None
 
-    while (True):
+    while True:
         ret, frame = cap.read()  # Read the frame
-        if ret == True:
-            # frame = pre_processing(frame)
-            # cv.imshow("lol", frame)
+        if ret:
+            frame = pre_processing(frame)
+            cv.imshow("lol", frame)
             # sudoku_frame = RealTimeSudokuSolver.recognize_and_solve_sudoku(frame, model, old_sudoku)
             # showImage(sudoku_frame, "Real Time Sudoku Solver", 1066, 600)  # Print the 'solved' image
             if cv.waitKey(1) & 0xFF == ord('q'):  # Hit q if you want to stop the camera
