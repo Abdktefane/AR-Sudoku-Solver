@@ -16,13 +16,6 @@ def gaussian_blur(src, kernel_size=(5, 5), sigmaX=0):
     return cv.GaussianBlur(src, kernel_size, sigmaX)
 
 
-def adaptive_thresh(src):
-    # return cv.adaptiveThreshold(src, 255, cv.ADAPTIVE_THRESH_MEAN_C | cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-    # cv.THRESH_BINARY_INV,
-    # 5, 2)
-    return cv.adaptiveThreshold(src, 255, 1, 1, 11, 2)  # for threshold and inverse at once
-
-
 def cross_dilation(src, size=3):
     se = cv.getStructuringElement(cv.MORPH_CROSS, (size, size))
     return cv.dilate(src, se)
@@ -113,31 +106,6 @@ def remove_side_lines(img, ratio):
     return img
 
 
-def largest_connected_component(image):
-    image = image.astype('uint8')
-    nb_components, output, stats, centroids = cv.connectedComponentsWithStats(image, connectivity=4)
-    sizes = stats[:, -1]
-
-    if len(sizes) <= 1:
-        blank_image = np.zeros(image.shape)
-        blank_image.fill(255)
-        return blank_image
-
-    max_label = 1
-    # Start from component 1 (not 0) because we want to leave out the background
-    max_size = sizes[1]
-
-    for i in range(2, nb_components):
-        if sizes[i] > max_size:
-            max_label = i
-            max_size = sizes[i]
-
-    img2 = np.zeros(output.shape)
-    img2.fill(255)
-    img2[output == max_label] = 0
-    return img2
-
-
 def get_best_shift(img):
     # Calculate how to centralize the image using its center of mass
     cy, cx = ndimage.measurements.center_of_mass(img)
@@ -145,6 +113,11 @@ def get_best_shift(img):
     shiftx = np.round(cols / 2.0 - cx).astype(int)
     shifty = np.round(rows / 2.0 - cy).astype(int)
     return shiftx, shifty
+
+
+def otsu_thresh(image):
+    _, ret = cv.threshold(image, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    return ret
 
 
 def shift(img, sx, sy):
@@ -185,7 +158,7 @@ def crop_image(img, src, M):
     original = img.copy()
 
     # TODO modify this
-    img = cv.resize(img, (300, 300))
+    # img = cv.resize(img, (300, 300))
     # cv.imshow("origin", img)
     img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     # img = cv.GaussianBlur(img, (3, 3), 0)
@@ -199,34 +172,22 @@ def crop_image(img, src, M):
     offset_w = np.math.floor(w / 10)  # Offset is used to get rid of the boundaries
     offset_h = np.math.floor(h / 10)
     fig, axs = plt.subplots(9, 9)
-    kernel = np.ones((3, 3), np.uint8)
     for i in range(9):
         for j in range(9):
             userGrid[i][j] = 1
             match = True
             n = i * 9 + j
             blocks.append(img[h * i + offset_h:h * (i + 1) - offset_h, w * j + offset_w:w * (j + 1) - offset_w])
-            # Resize
-            # blocks[n] = remove_side_lines(blocks[n], 0.6)
-            digit_pic_size = 28
-            blocks[n] = cv.resize(blocks[n], (digit_pic_size, digit_pic_size))
-            if i == 0 and j == 1:
-                cv.imshow("number1 before any pre_p", blocks[n])
-            # blocks[n] = cv.bitwise_not(blocks[n])
-            # blocks[n] = cv.GaussianBlur(blocks[n], (3, 3), 0)
-            #blocks[n] = adaptive_thresh(blocks[n])
-            #blocks[n] = largest_connected_component(blocks[n])
-            if i == 0 and j == 1:
-                cv.imshow("number2", blocks[n])
-
-            # _, blocks[n] = cv.threshold(blocks[n], 200, 255, cv.THRESH_BINARY)
-            # blocks[n] = cv.erode(blocks[n], kernel, iterations=1)
-            # blocks[n] = cv.dilate(blocks[n], kernel, iterations=1)
+            if i == utils.row_index_test and j == utils.col_index_test:
+                cv.imshow("number before any edit", blocks[n])
+            blocks[n] = utils.preprocess_for_number(blocks[n])
+            if i == utils.row_index_test and j == utils.col_index_test:
+                cv.imshow("number after edit", blocks[n])
 
             # Criteria 1 for detecting white cell:
             # Has too little black pixels
-            if blocks[n].sum() >= digit_pic_size ** 2 * 255 - digit_pic_size * 1 * 255:
-                blocks[n] = np.zeros((digit_pic_size, digit_pic_size))
+            if blocks[n].sum() >= utils.digit_pic_size ** 2 * 255 - utils.digit_pic_size * 1 * 255:
+                blocks[n] = np.zeros((utils.digit_pic_size, utils.digit_pic_size))
                 userGrid[i][j] = 0
                 match = False
             # Criteria 2 for detecting white cell
@@ -239,7 +200,7 @@ def crop_image(img, src, M):
             y_end = center_width // 2 + center_width
             center_region = blocks[n][x_start:x_end, y_start:y_end]
             if center_region.sum() >= center_width * center_height * 255 - 255:
-                blocks[n] = np.zeros((digit_pic_size, digit_pic_size))
+                blocks[n] = np.zeros((utils.digit_pic_size, utils.digit_pic_size))
                 userGrid[i][j] = 0
                 match = False
             # Centralize the image according to center of mass / BUT Not working properly
@@ -250,15 +211,36 @@ def crop_image(img, src, M):
             # blocks[n] = cv.resize(blocks[n], (50, 50))
 
             if match:
-                temp = np.uint8(blocks[n])
-                if i == 1 and j == 1:
-                    cv.imshow("number3", temp)
-                histogram = utils.hog.compute(temp, None, None)
-                histogram = np.asarray(histogram)
-                histogram = histogram.reshape((-1, utils.hog_output_shape))
-                id = utils.check_match(histogram, model)
-                print(i, j, id)
+                contours, hierarchy = cv.findContours(blocks[n].copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                if len(contours) != 0:
+                    copy = np.copy(blocks[n])
+                    c = max(contours, key=cv.contourArea)
+                    x, y, w, h = cv.boundingRect(c)
+                    # cropped = copy[y:y + h, x:x + w]
+                    rect = cv.rectangle(copy, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    cv.imshow('image with bounding box', rect)
+                    # cv.imshow('cropped image', cropped)
+                if i == utils.row_index_test and j == utils.col_index_test:
+                    cv.imshow("number before feed to hog", blocks[n])
+                histogram = utils.hog.compute(blocks[n], None, None)
+                histogram = np.asarray(histogram).reshape((-1, utils.hog_output_shape))
+                utils.check_match(histogram, model, i, j)
+
+                # utils.check_match(blocks[n], model, i, j)
+                # contours, hierarchy = cv.findContours(blocks[n], cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                # if len(contours) != 0:
+                #     c = max(contours, key=cv.contourArea)
+                #     x, y, w, h = cv.boundingRect(c)
+                #     cropped = blocks[n][y:y + h, x:x + w]
+                #     if i == utils.row_index_test and j == utils.col_index_test:
+                #         cv.imshow("number before feed to hog", blocks[n])
+                #     cropped = cv.resize(cropped, (28, 28))
+                #     histogram = utils.hog.compute(cropped, None, None)
+                #     histogram = np.asarray(histogram).reshape((-1, utils.hog_output_shape))
+                #     utils.check_match(histogram, model, i, j)
+                #     # utils.check_match(blocks[n], model, i, j)
             axs[i, j].imshow(blocks[n], cmap='Greys')
+    print('final result is %d right and %d wrong' % (utils.right, utils.right))
     plt.show()
     board = [
         [5, 3, 0, 0, 7, 0, 0, 0, 0],
@@ -292,7 +274,7 @@ def pre_processing(src):
     gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY)
     start_time = time.time()
     gauss_blur = gaussian_blur(gray)
-    inverse_binary_image = adaptive_thresh(gauss_blur)
+    inverse_binary_image = utils.adaptive_thresh(gauss_blur)
     grid, src = find_grid_with_contours(src, inverse_binary_image, start_time)
     print("FPS:{} MS".format((time.time() - start_time) * 1000))
     cv.imshow('base', grid)

@@ -57,6 +57,7 @@ def outso_thresh():
 
 
 def erosion(kernal, iter):
+    kernal = np.ones((5, 5), np.uint8)
     image = cv.imread('resources/j_letter.jpg', 0)
     erosion = cv.erode(image, kernal, iter)
     cv.imshow('erosion', erosion)
@@ -64,6 +65,7 @@ def erosion(kernal, iter):
 
 
 def delation(kernal, iter):
+
     image = cv.imread('resources/j_letter.jpg', 0)
     delation = cv.dilate(image, kernal, iter)
     cv.imshow('delation', delation)

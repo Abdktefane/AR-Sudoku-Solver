@@ -2,9 +2,11 @@
   <dictionary name="abd">
     <words>
       <w>cany</w>
+      <w>crossentropy</w>
       <w>laplacian</w>
       <w>otsu</w>
       <w>sobel</w>
+      <w>softmax</w>
       <w>sudoku</w>
       <w>wraped</w>
     </words>
