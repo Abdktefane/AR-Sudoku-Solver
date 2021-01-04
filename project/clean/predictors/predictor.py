@@ -22,4 +22,4 @@ class Predictor:
     def pre_process(self, image): raise NotImplementedError
 
     @abstractmethod
-    def predict(self, image): raise NotImplementedError
+    def predict(self, image, show_image_before_model_feed=False): raise NotImplementedError

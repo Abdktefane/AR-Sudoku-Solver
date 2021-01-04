@@ -34,8 +34,9 @@ class NeuralNetworkPredictor(Predictor):
     def pre_process(self, image):
         return image
 
-    def predict(self, image):
-        # cv.imshow('test ', image)
-        # cv.waitKey(0)
+    def predict(self, image, show_image_before_model_feed=False):
+        if show_image_before_model_feed:
+            cv.imshow('image before model feed', image)
+            cv.waitKey(0)
         histogram = self.hog_compute(self.pre_process(image))
         return self.model.predict(histogram)

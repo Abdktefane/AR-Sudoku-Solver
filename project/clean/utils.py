@@ -80,7 +80,9 @@ def crop_image_to_cells(img):
     w = img.shape[1] // 9
     offset_w = np.math.floor(w / 10)  # Offset is used to get rid of the boundaries
     offset_h = np.math.floor(h / 10)
-    blocks = np.zeros((9, 9, 64, 64))  # TODO check this 64 value to be dynamic
+    blocks = np.zeros(
+        (9, 9, h - (offset_h + offset_w), w - (offset_h + offset_w))
+    )
     for i in range(9):
         for j in range(9):
             # n = i * 9 + j

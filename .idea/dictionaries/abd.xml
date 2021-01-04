@@ -8,6 +8,7 @@
       <w>sobel</w>
       <w>softmax</w>
       <w>sudoku</w>
+      <w>uint</w>
       <w>wraped</w>
     </words>
   </dictionary>
