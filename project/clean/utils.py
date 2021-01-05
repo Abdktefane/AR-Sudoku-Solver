@@ -1,6 +1,8 @@
 import cv2 as cv
 import numpy as np
 
+from project.clean.cell_info import CellInfo
+
 digit_pic_size = 28
 
 
@@ -13,10 +15,26 @@ def cross_closing(src):
     return cv.morphologyEx(src, cv.MORPH_CLOSE, se)
 
 
+def disk_opening(src, sz=2):
+    se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
+    return cv.morphologyEx(src, cv.MORPH_OPEN, se)
+
+
+def disk_closing(src, sz=2):
+    se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2 * sz - 1, 2 * sz - 1))
+    return cv.morphologyEx(src, cv.MORPH_CLOSE, se)
+
+
+def line_opening(src, sz):
+    #  self.sudoku_board.shape[1] // 50
+    horizontal_structure = cv.getStructuringElement(cv.MORPH_RECT, (sz, 1))
+    return cv.morphologyEx(src, cv.MORPH_CLOSE, horizontal_structure)
+
+
 def adaptive_thresh(src):
     # return cv.adaptiveThreshold(src, 255, cv.ADAPTIVE_THRESH_MEAN_C | cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-    # cv.THRESH_BINARY_INV,
-    # 5, 2)
+    #     # cv.THRESH_BINARY_INV,
+    #     # 5, 2)
     return cv.adaptiveThreshold(src, 255, 1, 1, 11, 2)  # for threshold and inverse at once
 
 
@@ -77,10 +95,12 @@ def perspective_transformation(img, color_image, cnt):
 
 
 def crop_image_to_cells(img):
+    # _, img = cv.threshold(img, 200, 255, cv.THRESH_BINARY)
     h = img.shape[0] // 9
     w = img.shape[1] // 9
     offset_w = np.math.floor(w / 10)  # Offset is used to get rid of the boundaries
     offset_h = np.math.floor(h / 10)
+    print("===========", img.shape, h, w, offset_h, offset_w)
     blocks = np.zeros(
         (9, 9, h - (offset_h + offset_w), w - (offset_h + offset_w))
     )
@@ -88,6 +108,10 @@ def crop_image_to_cells(img):
         for j in range(9):
             # n = i * 9 + j
             blocks[i][j] = img[h * i + offset_h:h * (i + 1) - offset_h, w * j + offset_w:w * (j + 1) - offset_w]
+            if i == 2 and j == 0:
+                cv.imshow("croped", blocks[i][j])
+            if i == 3 and j == 0:
+                cv.imshow("croped1", blocks[i][j])
     return blocks
 
 
@@ -100,6 +124,8 @@ def write_solution_on_image(source, solution, sudoku_cells):
         for j in range(SIZE):
             if sudoku_cells[i][j] != 0:  # If user fill this cell
                 continue  # Move on
+            # if i == 4 and j == 8:
+            # print("==================", solution[i][j], i, j)
             text = str(solution[i][j])
             off_set_x = width // 15
             off_set_y = height // 15
@@ -118,38 +144,39 @@ def write_solution_on_image(source, solution, sudoku_cells):
     return source
 
 
-# def is_number(number):
-#     match = True
-#     if number.sum() >= digit_pic_size ** 2 * 255 - digit_pic_size * 2 * 255:
-#         match = False
-#     else:
-#         # Criteria 2 for detecting white cell
-#         # Huge white area in the center
-#         center_width = number.shape[1] // 2
-#         center_height = number.shape[0] // 2
-#         x_start = center_height // 2
-#         x_end = center_height // 2 + center_height
-#         y_start = center_width // 2
-#         y_end = center_width // 2 + center_width
-#         center_region = number[x_start:x_end, y_start:y_end]
-#         if center_region.sum() >= center_width * center_height * 255 - 255:
-#             match = False
-#     return match
-
 def is_number(number):
     match = True
-    # Criteria 2 for detecting white cell
-    # Huge white area in the center
-    center_width = number.shape[1] // 2
-    center_height = number.shape[0] // 2
-    x_start = center_height // 2
-    x_end = center_height // 2 + center_height
-    y_start = center_width // 2
-    y_end = center_width // 2 + center_width
-    center_region = number[x_start:x_end, y_start:y_end]
-    if center_region.sum() >= center_width * center_height * 255 - 255:
+    if number.sum() >= digit_pic_size ** 2 * 255 - digit_pic_size * 2 * 255:
         match = False
+    else:
+        # Criteria 2 for detecting white cell
+        # Huge white area in the center
+        center_width = number.shape[1] // 2
+        center_height = number.shape[0] // 2
+        x_start = center_height // 2
+        x_end = center_height // 2 + center_height
+        y_start = center_width // 2
+        y_end = center_width // 2 + center_width
+        center_region = number[x_start:x_end, y_start:y_end]
+        if center_region.sum() >= center_width * center_height * 255 - 255:
+            match = False
     return match
+
+
+# def is_number(number, i, j):
+#     match = True
+#     # Criteria 2 for detecting white cell
+#     # Huge white area in the center
+#     center_width = number.shape[1] // 2
+#     center_height = number.shape[0] // 2
+#     x_start = center_height // 2
+#     x_end = center_height // 2 + center_height
+#     y_start = center_width // 2
+#     y_end = center_width // 2 + center_width
+#     center_region = number[x_start:x_end, y_start:y_end]
+#     if center_region.sum() >= center_width * center_height * 255 - 255:
+#         match = False
+#     return match
 
 
 def largest_connected_component(image):
@@ -177,6 +204,26 @@ def largest_connected_component(image):
     return img2
 
 
+def remove_side_lines(img, ratio):
+    """
+        Remove black lines from image sides
+    """
+
+    while np.sum(img[0]) <= (1 - ratio) * img.shape[1] * 255:
+        img = img[1:]
+    # Bottom
+    while np.sum(img[:, -1]) <= (1 - ratio) * img.shape[1] * 255:
+        img = np.delete(img, -1, 1)
+    # Left
+    while np.sum(img[:, 0]) <= (1 - ratio) * img.shape[0] * 255:
+        img = np.delete(img, 0, 1)
+    # Right
+    while np.sum(img[-1]) <= (1 - ratio) * img.shape[0] * 255:
+        img = img[:-1]
+
+    return img
+
+
 def pretty_model_result(real_board, predicted_board):
     right = 0
     wrong = 0
@@ -195,3 +242,51 @@ def pretty_model_result(real_board, predicted_board):
     print('<------------------->')
     print("{} Right predict and {} Wrong predict".format(right, wrong))
     print('<------------------->\n')
+
+
+def get_numbers_contours(sudoku_board):
+    cv.imshow("main", sudoku_board)
+    # temp = gaussian_blur(sudoku_board, (3,3))
+    # cv.imshow("temp", temp)
+    # temp = cv.adaptiveThreshold(temp, 255,
+    #                      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+    #                      cv.THRESH_BINARY,
+    #                      11, 2)
+
+    # temp = adaptive_thresh(temp)
+    # temp = cv.bitwise_not(temp)
+    # cv.imshow("temp2", temp)
+    temp = disk_opening(sudoku_board)
+    # temp = disk_closing(temp)
+    # erd = cv.erode(disk_open, kernel=(3, 3))
+    # dil = cv.dilate(erd, kernel=(3, 3))
+
+    cv.imshow("temp3", temp)
+    mask = largest_connected_component(cv.dilate(sudoku_board, kernel=(3, 3)))
+    cv.imshow("mask", mask)
+    numbers = np.clip(temp * (mask[:, :] / 255), 0, 255).astype(np.uint8)
+    cv.imshow("numbers", numbers)
+    contours, hierarchy = cv.findContours(numbers, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=lambda con: cv.contourArea(con), reverse=True)
+    padding = 2
+    print("the allowed area", sudoku_board.size * 0.058 / 100)
+    i = 0
+    numbers = []
+    for c in contours:
+        area = cv.contourArea(c)
+        x, y, w, h = cv.boundingRect(c)
+        if area * 100 < sudoku_board.size * 0.058:
+            #print(area, "not valid")
+            continue
+        else:
+            print(area, "is valid")
+            numbers.append(
+                CellInfo(sudoku_board[y - padding:y + padding + h, x - padding:x + w + padding], [x, y],
+                         sudoku_board.shape)
+            )
+            #cv.imshow("number" + str(i), numbers[i].image)
+            i += 1
+        #bom = cv.drawContours(self.color_sudoku_board, [c], 0, (0, 255, 0), 3)
+        #cv.imshow("cont", bom)
+        #cv.waitKey(0)
+    return numbers

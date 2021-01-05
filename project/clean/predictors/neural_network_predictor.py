@@ -5,6 +5,8 @@ from tensorflow.keras.layers import Dropout
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 import cv2 as cv
+import numpy as np
+from project.clean import utils as utils
 
 
 class NeuralNetworkPredictor(Predictor):
@@ -32,6 +34,7 @@ class NeuralNetworkPredictor(Predictor):
         return model
 
     def pre_process(self, image):
+        # return utils.largest_connected_component(image).astype(np.uint8)
         return image
 
     def predict(self, image, show_image_before_model_feed=False):
