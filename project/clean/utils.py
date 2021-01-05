@@ -39,7 +39,7 @@ def coordinates_division(corner):
     return corner[0] - corner[1]
 
 
-def perspective_transformation(img, cnt):
+def perspective_transformation(img, color_image, cnt):
     corners = np.zeros((4, 2), dtype="float32")
     rect = np.zeros((4, 2), dtype="float32")
     for i in range(4):
@@ -72,7 +72,8 @@ def perspective_transformation(img, cnt):
         [[0, 0], [max_width - 1, 0], [max_width - 1, max_height - 1], [0, max_height - 1]])  # TL -> TR -> BR -> BL
     M = cv.getPerspectiveTransform(pts1, pts2)
     dst = cv.warpPerspective(img, M, (max_width, max_height))
-    return dst, rect, M
+    color_dst = cv.warpPerspective(color_image, M, (max_width, max_height))
+    return dst, color_dst, rect, M
 
 
 def crop_image_to_cells(img):
@@ -90,22 +91,64 @@ def crop_image_to_cells(img):
     return blocks
 
 
+def write_solution_on_image(source, solution, sudoku_cells):
+    # Write grid on image
+    SIZE = 9
+    width = source.shape[1] // 9
+    height = source.shape[0] // 9
+    for i in range(SIZE):
+        for j in range(SIZE):
+            if sudoku_cells[i][j] != 0:  # If user fill this cell
+                continue  # Move on
+            text = str(solution[i][j])
+            off_set_x = width // 15
+            off_set_y = height // 15
+            font = cv.FONT_HERSHEY_SIMPLEX
+            (text_height, text_width), baseLine = cv.getTextSize(text, font, fontScale=1, thickness=3)
+            marginX = np.floor(width / 7)
+            marginY = np.floor(height / 7)
+
+            font_scale = 0.6 * min(width, height) / max(text_height, text_width)
+            text_height *= font_scale
+            text_width *= font_scale
+            bottom_left_corner_x = int(width * j + np.floor((width - text_width) / 2) + off_set_x)
+            bottom_left_corner_y = int(height * (i + 1) - np.floor((height - text_height) / 2) + off_set_y)
+            source = cv.putText(source, text, (bottom_left_corner_x, bottom_left_corner_y),
+                                font, font_scale, (0, 255, 0), thickness=3, lineType=cv.LINE_AA)
+    return source
+
+
+# def is_number(number):
+#     match = True
+#     if number.sum() >= digit_pic_size ** 2 * 255 - digit_pic_size * 2 * 255:
+#         match = False
+#     else:
+#         # Criteria 2 for detecting white cell
+#         # Huge white area in the center
+#         center_width = number.shape[1] // 2
+#         center_height = number.shape[0] // 2
+#         x_start = center_height // 2
+#         x_end = center_height // 2 + center_height
+#         y_start = center_width // 2
+#         y_end = center_width // 2 + center_width
+#         center_region = number[x_start:x_end, y_start:y_end]
+#         if center_region.sum() >= center_width * center_height * 255 - 255:
+#             match = False
+#     return match
+
 def is_number(number):
     match = True
-    if number.sum() >= digit_pic_size ** 2 * 255 - digit_pic_size * 1 * 255:
+    # Criteria 2 for detecting white cell
+    # Huge white area in the center
+    center_width = number.shape[1] // 2
+    center_height = number.shape[0] // 2
+    x_start = center_height // 2
+    x_end = center_height // 2 + center_height
+    y_start = center_width // 2
+    y_end = center_width // 2 + center_width
+    center_region = number[x_start:x_end, y_start:y_end]
+    if center_region.sum() >= center_width * center_height * 255 - 255:
         match = False
-    else:
-        # Criteria 2 for detecting white cell
-        # Huge white area in the center
-        center_width = number.shape[1] // 2
-        center_height = number.shape[0] // 2
-        x_start = center_height // 2
-        x_end = center_height // 2 + center_height
-        y_start = center_width // 2
-        y_end = center_width // 2 + center_width
-        center_region = number[x_start:x_end, y_start:y_end]
-        if center_region.sum() >= center_width * center_height * 255 - 255:
-            match = False
     return match
 
 
