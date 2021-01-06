@@ -15,13 +15,13 @@ def cross_closing(src):
     return cv.morphologyEx(src, cv.MORPH_CLOSE, se)
 
 
-def disk_opening(src, sz=2):
-    se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
+def disk_opening(src, sz=3):
+    se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (sz, sz))
     return cv.morphologyEx(src, cv.MORPH_OPEN, se)
 
 
-def disk_closing(src, sz=2):
-    se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2 * sz - 1, 2 * sz - 1))
+def disk_closing(src, sz=3):
+    se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (sz, sz))
     return cv.morphologyEx(src, cv.MORPH_CLOSE, se)
 
 
@@ -263,8 +263,9 @@ def get_numbers_contours(sudoku_board, colored_sudoku_board):
     # dil = cv.dilate(erd, kernel=(3, 3))
 
     # cv.imshow("temp3", temp)
-    mask = largest_connected_component(
-        cv.dilate(sudoku_board, kernel=(3, 3)))  # dilate to fully connect the board lines
+    # mask = largest_connected_component(
+    #     cv.dilate(sudoku_board, kernel=(3, 3)))  # dilate to fully connect the board lines
+    mask = largest_connected_component(disk_closing(sudoku_board))
     cv.imshow("mask", mask)
     numbers = np.clip(sudoku_board * (mask[:, :] / 255), 0, 255).astype(np.uint8)
     lol = disk_opening(numbers)
@@ -278,7 +279,7 @@ def get_numbers_contours(sudoku_board, colored_sudoku_board):
     contours = sorted(contours, key=lambda con: cv.contourArea(con), reverse=True)
     padding = 4
 
-    cv.waitKey(0)
+    #cv.waitKey(0)
     i = 0
     numbers = []
     valid_area_ratio = 0.058

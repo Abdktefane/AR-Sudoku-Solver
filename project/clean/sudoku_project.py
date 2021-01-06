@@ -24,11 +24,15 @@ class Sudoku:
         self.sudoku_cells_images = None
         self.sudoku_cells = None
 
-    def pre_process_source_image(self):
+    def pre_process_source_image(self, camera):
         self.logger.tick('pre_process source image')
         src = self.source_image.copy()
-        gauss_blur = utils.gaussian_blur(src)
+        gauss_blur = utils.gaussian_blur(src, (13, 13))
         self.preprocessed_image = utils.adaptive_thresh(gauss_blur)
+        cv.imshow("adapt", self.preprocessed_image)
+        if camera:
+            self.preprocessed_image = cv.dilate(self.preprocessed_image.copy(), (19, 19), iterations=4)
+            cv.imshow("dialated", self.preprocessed_image)
         self.logger.end('pre_process source image')
 
     def get_sudoku_board(self):
@@ -36,6 +40,8 @@ class Sudoku:
         src = self.preprocessed_image.copy()
         max_contour = utils.find_biggest_contour(src)
         if max_contour is not None:
+            temp = cv.drawContours(self.color_source_image, [max_contour], 0, (0, 255, 0), 3)
+            cv.imshow("contour board", temp)
             cnt = cv.approxPolyDP(max_contour, 0.01 * cv.arcLength(max_contour, True), True)
             if len(cnt) == 4:
                 self.sudoku_board, self.color_sudoku_board, rect, self.perspective_array = \
@@ -129,13 +135,13 @@ class Sudoku:
         if self.sudoku_board is not None:
             cv.imshow('sudoku board', self.sudoku_board)
         # cv.imshow('sudoku cells', self.sudoku_cells_images[0][0])
-        cv.waitKey(0)
+        # cv.waitKey(0)
 
-    def feed(self, image, show_result_image=False, real_board=None):
+    def feed(self, image, show_result_image=False, real_board=None, camera=False):
         self.logger.tick('frame time', force_print=True)
         self.color_source_image = image
         self.source_image = cv.cvtColor(self.color_source_image, cv.COLOR_BGR2GRAY)
-        self.pre_process_source_image()
+        self.pre_process_source_image(camera)
         self.get_sudoku_board()
 
         has_board = self.get_sudoku_cells_images()
@@ -145,7 +151,7 @@ class Sudoku:
             self.solve()
 
         self.logger.end('frame time', force_print=True)
-        if self.debug:
+        if self.debug and self.sudoku_cells is not None:
             utils.pretty_model_result(real_board, self.sudoku_cells)
         if show_result_image:
             self.show_result_image()
@@ -160,7 +166,7 @@ class Sudoku:
                                            , flags=cv.WARP_INVERSE_MAP)
         result = np.where(result_sudoku.sum(axis=-1, keepdims=True) != 0, result_sudoku, self.color_source_image)
         cv.imshow('result', result)
-        cv.waitKey(0)
+        # cv.waitKey(0)
 
 
 # if __name__ == '__main__':
@@ -196,37 +202,40 @@ class Sudoku:
 #     sudoku.feed(cv.imread('resources/sod4.jpg'), real_board=board)
 
 
-# if __name__ == '__main__':
-#     board = [
-#         [5, 3, 0, 0, 7, 0, 0, 0, 0],
-#         [6, 0, 0, 1, 9, 5, 0, 0, 0],
-#         [0, 9, 8, 0, 0, 0, 0, 6, 0],
-#         [8, 0, 0, 0, 6, 0, 0, 0, 3],
-#         [4, 0, 0, 8, 0, 3, 0, 0, 1],
-#         [7, 0, 0, 0, 2, 0, 0, 0, 6],
-#         [0, 6, 0, 0, 0, 0, 2, 8, 0],
-#         [0, 0, 0, 4, 1, 9, 0, 0, 5],
-#         [0, 0, 0, 0, 8, 0, 0, 7, 9]
-#     ]
-#     model = NeuralNetworkPredictor()
-#     sudoku = Sudoku(model, debug=False, show_image_before_model_feed=False)
-#     cap = cv.VideoCapture("resources/sudoku2.mp4")
-#     # cap.set(3, 1280)  # HD Camera
-#     # cap.set(4, 720)
-#     old_sudoku = None
-#
-#     while True:
-#         ret, frame = cap.read()  # Read the frame
-#         if ret:
-#             sudoku.feed(frame, real_board=board, show_result_image=True)
-#             if cv.waitKey(1) & 0xFF == ord('q'):  # Hit q if you want to stop the camera
-#                 break
-#         else:
-#             break
-#
-#     cap.release()
-#     # out.release()
-#     cv.destroyAllWindows()
+if __name__ == '__main__':
+    board = [
+        [5, 3, 0, 0, 7, 0, 0, 0, 0],
+        [6, 0, 0, 1, 9, 5, 0, 0, 0],
+        [0, 9, 8, 0, 0, 0, 0, 6, 0],
+        [8, 0, 0, 0, 6, 0, 0, 0, 3],
+        [4, 0, 0, 8, 0, 3, 0, 0, 1],
+        [7, 0, 0, 0, 2, 0, 0, 0, 6],
+        [0, 6, 0, 0, 0, 0, 2, 8, 0],
+        [0, 0, 0, 4, 1, 9, 0, 0, 5],
+        [0, 0, 0, 0, 8, 0, 0, 7, 9]
+    ]
+    model = NeuralNetworkPredictor()
+    sudoku = Sudoku(model, debug=False, show_image_before_model_feed=False)
+    # cap = cv.VideoCapture("resources/sudoku2.mp4")
+    cap = cv.VideoCapture(0)
+    cap.set(3, 1280)  # HD Camera
+    cap.set(4, 720)
+    old_sudoku = None
+
+    while True:
+        ret, frame = cap.read()  # Read the frame
+        if ret:
+            frame = cv.resize(frame, (1280 * 3 // 3, 720 * 4 // 3))
+            sudoku.feed(frame, real_board=board, show_result_image=True, camera=True)
+            cv.imshow("frame", frame)
+            if cv.waitKey(1) & 0xFF == ord('q'):  # Hit q if you want to stop the camera
+                break
+        else:
+            break
+
+    cap.release()
+    # out.release()
+    cv.destroyAllWindows()
 
 # if __name__ == '__main__':
 #     board = [
@@ -245,20 +254,18 @@ class Sudoku:
 #     sudoku.feed(cv.imread('resources/sod6.jpg'), real_board=board, show_result_image=False)
 #     # sudoku.feed(cv.imread('resources/sudoku.jpg'), real_board=board, show_result_image=False)
 
-if __name__ == '__main__':
-    board = [
-        [0, 0, 0, 6, 0, 4, 7, 0, 0],
-        [7, 0, 6, 0, 0, 0, 0, 0, 9],
-        [0, 0, 0, 0, 0, 5, 0, 8, 0],
-
-        [0, 7, 0, 0, 2, 0, 0, 9, 3],
-        [8, 0, 0, 0, 0, 0, 0, 0, 5],
-        [4, 3, 0, 0, 1, 0, 0, 7, 0],
-
-        [0, 5, 0, 2, 0, 0, 0, 0, 0],
-        [3, 0, 0, 0, 0, 0, 2, 0, 8],
-        [0, 0, 2, 3, 0, 1, 0, 0, 0]
-    ]
-    model = NeuralNetworkPredictor()
-    sudoku = Sudoku(model, debug=True, show_image_before_model_feed=False)
-    sudoku.feed(cv.imread('resources/sudoku.jpg'), real_board=board, show_result_image=True)
+# if __name__ == '__main__':
+#     board = [
+#         [0, 0, 0, 6, 0, 4, 7, 0, 0],
+#         [7, 0, 6, 0, 0, 0, 0, 0, 9],
+#         [0, 0, 0, 0, 0, 5, 0, 8, 0],
+#         [0, 7, 0, 0, 2, 0, 0, 9, 3],
+#         [8, 0, 0, 0, 0, 0, 0, 0, 5],
+#         [4, 3, 0, 0, 1, 0, 0, 7, 0],
+#         [0, 5, 0, 2, 0, 0, 0, 0, 0],
+#         [3, 0, 0, 0, 0, 0, 2, 0, 8],
+#         [0, 0, 2, 3, 0, 1, 0, 0, 0]
+#     ]
+#     model = NeuralNetworkPredictor()
+#     sudoku = Sudoku(model, debug=False, show_image_before_model_feed=True)
+#     sudoku.feed(cv.imread('resources/sudoku.jpg'), real_board=board, show_result_image=True)

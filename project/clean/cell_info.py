@@ -13,9 +13,11 @@ class CellInfo:
         self.value = None
 
     def process_image(self):
+        se = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
         temp = cv.bitwise_not(self.source_image)
-        return utils.largest_connected_component(
+        temp = utils.largest_connected_component(
             cv.bitwise_not(cv.resize(temp, (utils.digit_pic_size, utils.digit_pic_size)))).astype(np.uint8)
+        return cv.dilate(temp, se, iterations=1)
 
     def calc_position(self, size):
         width = size[1] / 9
