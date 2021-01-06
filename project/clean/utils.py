@@ -238,16 +238,17 @@ def pretty_model_result(real_board, predicted_board):
                 score = 'Right'
             else:
                 wrong += 1
-            print("{} predict for {} position({},{})".format(score, real_board[i][j], i + 1, j + 1))
+            print("{} predict {} for {} position({},{})".format(score, predicted_board[i][j], real_board[i][j], i + 1,
+                                                                j + 1))
     print('<------------------->')
     print("{} Right predict and {} Wrong predict".format(right, wrong))
     print('<------------------->\n')
 
 
-def get_numbers_contours(sudoku_board):
+def get_numbers_contours(sudoku_board, colored_sudoku_board):
     cv.imshow("main", sudoku_board)
     # temp = gaussian_blur(sudoku_board, (3,3))
-    # cv.imshow("temp", temp)
+    # cv.imshow("temp", temp)sudoku_board
     # temp = cv.adaptiveThreshold(temp, 255,
     #                      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
     #                      cv.THRESH_BINARY,
@@ -256,37 +257,52 @@ def get_numbers_contours(sudoku_board):
     # temp = adaptive_thresh(temp)
     # temp = cv.bitwise_not(temp)
     # cv.imshow("temp2", temp)
-    temp = disk_opening(sudoku_board)
+    # temp = disk_opening(sudoku_board)
     # temp = disk_closing(temp)
     # erd = cv.erode(disk_open, kernel=(3, 3))
     # dil = cv.dilate(erd, kernel=(3, 3))
 
-    cv.imshow("temp3", temp)
-    mask = largest_connected_component(cv.dilate(sudoku_board, kernel=(3, 3)))
+    # cv.imshow("temp3", temp)
+    mask = largest_connected_component(
+        cv.dilate(sudoku_board, kernel=(3, 3)))  # dilate to fully connect the board lines
     cv.imshow("mask", mask)
-    numbers = np.clip(temp * (mask[:, :] / 255), 0, 255).astype(np.uint8)
-    cv.imshow("numbers", numbers)
-    contours, hierarchy = cv.findContours(numbers, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    numbers = np.clip(sudoku_board * (mask[:, :] / 255), 0, 255).astype(np.uint8)
+    lol = disk_opening(numbers)
+    # lol = cv.bitwise_not(lol)
+    # lol = gaussian_blur(lol, (3, 3))
+    # lol = adaptive_thresh(lol)
+    # _, lol = cv.threshold(lol, 150, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # lol = disk_opening(lol)
+    cv.imshow("lol", lol)
+    contours, hierarchy = cv.findContours(lol, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=lambda con: cv.contourArea(con), reverse=True)
-    padding = 2
-    print("the allowed area", sudoku_board.size * 0.058 / 100)
+    padding = 4
+
+    cv.waitKey(0)
     i = 0
     numbers = []
+    valid_area_ratio = 0.058
+    max_h_to_w_ratio = 75
+    min_h_to_w_ratio = 30
+    # print("the allowed area", sudoku_board.size * valid_area_ratio / 100)
+    image_h_to_w_ratio = sudoku_board.shape[1] / sudoku_board.shape[0] * 3
     for c in contours:
         area = cv.contourArea(c)
         x, y, w, h = cv.boundingRect(c)
-        if area * 100 < sudoku_board.size * 0.058:
-            #print(area, "not valid")
+        image_to_cell_ratio = (h / w) * 100 / image_h_to_w_ratio
+        if area * 100 < sudoku_board.size * valid_area_ratio \
+                or max_h_to_w_ratio < image_to_cell_ratio or image_to_cell_ratio < min_h_to_w_ratio:
+            # print(area, "not valid")
             continue
         else:
-            print(area, "is valid")
+            # print(area, "is valid")
             numbers.append(
                 CellInfo(sudoku_board[y - padding:y + padding + h, x - padding:x + w + padding], [x, y],
                          sudoku_board.shape)
             )
-            #cv.imshow("number" + str(i), numbers[i].image)
-            i += 1
-        #bom = cv.drawContours(self.color_sudoku_board, [c], 0, (0, 255, 0), 3)
-        #cv.imshow("cont", bom)
-        #cv.waitKey(0)
+        #     cv.imshow("number" + str(i), sudoku_board[y - padding:y + padding + h, x - padding:x + w + padding])
+        #     i += 1
+        # bom = cv.drawContours(colored_sudoku_board, [c], 0, (0, 255, 0), 3)
+        # cv.imshow("cont", bom)
+        # cv.waitKey(0)
     return numbers
